@@ -161,7 +161,9 @@ with tab4:
                 if data.empty:
                     st.error("Không tìm thấy dữ liệu.")
                 else:
-                    df = data[['Close']].copy()
+                    # Ép kiểu dữ liệu đa tầng của yfinance về dạng Series 1D đơn giản
+                    close_series = data['Close'].squeeze()
+                    df = pd.DataFrame({'Close': close_series})
                     
                     # 2. FEATURE ENGINEERING (Dùng Toán học tạo đặc trưng)
                     # Tính lợi nhuận hằng ngày (Momentum)
