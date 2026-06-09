@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 st.set_page_config(page_title="Mô phỏng Hồi quy Chứng khoán", layout="wide")
 st.title("📊 Ứng Dụng Mô Phỏng & Thực Nghiệm Các Mô Hình Hồi Quy Tài Chính")
 
-# Chia các tab nội dung theo đúng cấu trúc nghiên cứu nâng cấp
+# Chia các tab nội dung theo đúng cấu trúc bài thuyết trình
 tab1, tab2, tab3, tab4 = st.tabs([
     "1. Hồi quy tuyến tính tĩnh", 
     "2. Mô hình tự hồi quy AR(1)", 
@@ -39,9 +39,15 @@ with tab1:
         Y = pure_Y + noise
         
         fig1 = go.Figure()
-        fig1.add_trace(go.Scatter(x=X, y=Y, mode='markers', name='Giá thực tế (Có nhiễu)'))
-        fig1.add_trace(go.Scatter(x=X, y=pure_Y, mode='lines', name='Đường hồi quy lý thuyết', line=dict(color='red', width=2)))
-        fig1.update_layout(title="Mô phỏng đường xu hướng tĩnh", xaxis_title="Thời gian (Phiên)", yaxis_title="Giá cổ phiếu", height=450)
+        fig1.add_trace(go.Scatter(x=X, y=Y, mode='markers', name='🔵 Điểm giá thực tế', marker=dict(color='blue', opacity=0.5)))
+        fig1.add_trace(go.Scatter(x=X, y=pure_Y, mode='lines', name='🔴 Đường xu hướng (OLS)', line=dict(color='red', width=3)))
+        
+        # Thêm nhãn giải thích trực tiếp lên đồ thị
+        fig1.add_annotation(x=n_points/2, y=pure_Y[int(n_points/2)] + noise_level*2, 
+                            text="Khoảng cách từ điểm xanh đến đường đỏ chính là Sai số (Residuals)", 
+                            showarrow=True, arrowhead=2, arrowsize=1, arrowwidth=2, arrowcolor="black")
+        
+        fig1.update_layout(title="Mô phỏng đường xu hướng tĩnh", xaxis_title="Thời gian (Phiên)", yaxis_title="Giá cổ phiếu", height=450, legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01))
         st.plotly_chart(fig1, use_container_width=True)
 
 # ==========================================
@@ -69,10 +75,14 @@ with tab2:
                 break
                 
         fig2 = go.Figure()
-        fig2.add_trace(go.Scatter(y=ar_data, mode='lines', name='Chuỗi giá AR(1)'))
+        fig2.add_trace(go.Scatter(y=ar_data, mode='lines', name='🔵 Quỹ đạo giá AR(1)', line=dict(color='blue')))
         if abs(beta) < 1:
             mean_long_term = alpha / (1 - beta)
-            fig2.add_shape(type="line", x0=0, y0=mean_long_term, x1=200, y1=mean_long_term, line=dict(color="Green", dash="dash"), name="Mức cân bằng")
+            fig2.add_shape(type="line", x0=0, y0=mean_long_term, x1=200, y1=mean_long_term, line=dict(color="Green", width=3, dash="dash"), name="Mức cân bằng")
+            
+            # Thêm annotation nhãn mác
+            fig2.add_annotation(x=100, y=mean_long_term, text="🟢 Lực Nam châm (Trục cân bằng dài hạn)", showarrow=True, arrowhead=2, ax=0, ay=-40)
+            
             st.success(f"Chuỗi đạt trạng thái dừng. Trục trung bình hồi quy dài hạn: {mean_long_term:.2f}")
         else:
             st.error("Chuỗi không dừng (Bùng nổ hoặc Bước ngẫu nhiên)! Không tồn tại xu hướng hội tụ về mức cân bằng.")
@@ -108,13 +118,18 @@ with tab3:
             X_ou[i] = X_ou[i-1] + theta * (mu - X_ou[i-1]) * dt + sigma * dW
             
         fig3 = go.Figure()
-        fig3.add_trace(go.Scatter(x=t_space, y=X_ou, mode='lines', name='Quỹ đạo giá liên tục'))
-        fig3.add_shape(type="line", x0=0, y0=mu, x1=T, y1=mu, line=dict(color="orange", width=2, dash="dash"), name="Mức trung bình mu")
-        fig3.update_layout(title="Mô phỏng lực kéo liên tục của tiến trình O-U", xaxis_title="Thời gian liên tục (t)", yaxis_title="Giá tài sản Xt", height=450)
+        fig3.add_trace(go.Scatter(x=t_space, y=X_ou, mode='lines', name='🔵 Quỹ đạo giá liên tục', line=dict(color='blue')))
+        fig3.add_shape(type="line", x0=0, y0=mu, x1=T, y1=mu, line=dict(color="orange", width=3, dash="dash"), name="Mức trung bình mu")
+        
+        # Thêm annotation giải thích cơ chế
+        fig3.add_annotation(x=T/2, y=mu, text="🟠 Trục cân bằng lý thuyết", showarrow=True, ax=0, ay=-40)
+        fig3.add_annotation(x=T/4, y=np.max(X_ou), text="Lực hút tỷ lệ thuận với khoảng cách (Vận tốc θ)", showarrow=False, font=dict(color="red"))
+
+        fig3.update_layout(title="Mô phỏng lực kéo liên tục của tiến trình O-U", xaxis_title="Thời gian liên tục (t)", yaxis_title="Giá tài sản Xt", height=450, legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01))
         st.plotly_chart(fig3, use_container_width=True)
 
 # ==========================================
-# TAB 4: THỰC NGHIỆM DỮ LIỆU THỰC TẾ (NEW!)
+# TAB 4: THỰC NGHIỆM DỮ LIỆU THỰC TẾ
 # ==========================================
 with tab4:
     st.header("⚡ Thực Nghiệm Thuật Toán Định Lượng Với Dữ Liệu Thật")
@@ -146,56 +161,54 @@ with tab4:
                     dates = data.index
                     
                     # 2. Xây dựng toán học ước lượng tham số (Model Calibration via OLS)
-                    # Phương trình rời rạc hóa chính xác: X_t = m * X_{t-1} + c + epsilon
                     X_prev = prices[:-1]
                     X_curr = prices[1:]
                     
                     # Áp dụng Đại số tuyến tính tìm ma trận hệ số bằng OLS [X_prev, 1]
                     A = np.vstack([X_prev, np.ones(len(X_prev))]).T
-                    # Giải nghiệm hệ phương trình bằng Bình phương tối thiểu bình thường
                     m, c = np.linalg.lstsq(A, X_curr, rcond=None)[0]
                     
                     # Tính toán phần dư (Residuals) để tìm phương sai sai số
                     residuals = X_curr - (m * X_prev + c)
                     res_variance = np.var(residuals, ddof=2)
                     
-                    # Khôi phục các tham số liên tục của phương trình vi phân ngẫu nhiên (SDE)
                     dt_step = 1.0  # Bước thời gian rời rạc là 1 ngày
                     
-                    # Tránh lỗi logarit số âm nếu mô hình bùng nổ không dừng
-                    if m > 0:
+                    if m > 0 and m < 1: # Đảm bảo tính dừng
                         calculated_theta = -np.log(m) / dt_step
                         calculated_mu = c / (1 - m)
                         calculated_sigma = np.sqrt(res_variance * 2 * calculated_theta / (1 - m**2))
                         
                         # 3. Trực quan hóa kết quả lên đồ thị
                         fig4 = go.Figure()
-                        # Vẽ đường giá thực tế
-                        fig4.add_trace(go.Scatter(x=dates, y=prices, mode='lines', name=f'Giá thực tế {ticker}', line=dict(color='#1f77b4')))
-                        # Vẽ trục trung bình hồi quy tìm được
-                        fig4.add_shape(type="line", x0=dates[0], y0=calculated_mu, x1=dates[-1], y1=calculated_mu, 
-                                       line=dict(color="Red", width=2, dash="dash"), name="Trục cân bằng Mu")
+                        fig4.add_trace(go.Scatter(x=dates, y=prices, mode='lines', name=f'🔵 Giá thực tế {ticker}', line=dict(color='#1f77b4')))
                         
-                        # Tính dải biên an toàn dao động (±2 Sigma)
+                        # Trục trung bình
+                        fig4.add_shape(type="line", x0=dates[0], y0=calculated_mu, x1=dates[-1], y1=calculated_mu, line=dict(color="Red", width=2, dash="dash"))
+                        fig4.add_trace(go.Scatter(x=[dates[-1]], y=[calculated_mu], mode='text', text=['🔴 Trục cân bằng'], textposition='top left', showlegend=False))
+                        
+                        # Biên trên / Biên dưới
                         upper_band = calculated_mu + 2 * (calculated_sigma / np.sqrt(2 * calculated_theta))
                         lower_band = calculated_mu - 2 * (calculated_sigma / np.sqrt(2 * calculated_theta))
                         
-                        fig4.add_shape(type="line", x0=dates[0], y0=upper_band, x1=dates[-1], y1=upper_band, line=dict(color="rgba(255,0,0,0.2)", width=1, dash="dot"))
-                        fig4.add_shape(type="line", x0=dates[0], y0=lower_band, x1=dates[-1], y1=lower_band, line=dict(color="rgba(255,0,0,0.2)", width=1, dash="dot"))
+                        fig4.add_shape(type="line", x0=dates[0], y0=upper_band, x1=dates[-1], y1=upper_band, line=dict(color="rgba(255,0,0,0.5)", width=2, dash="dot"))
+                        fig4.add_trace(go.Scatter(x=[dates[-1]], y=[upper_band], mode='text', text=['Biên Quá Mua (+2σ)'], textposition='top left', showlegend=False, textfont=dict(color="red")))
                         
-                        fig4.update_layout(title=f"Trục trung bình hồi quy định lượng toán học của {ticker}", xaxis_title="Ngày giao dịch", yaxis_title="Giá (USD/VND)", height=450)
+                        fig4.add_shape(type="line", x0=dates[0], y0=lower_band, x1=dates[-1], y1=lower_band, line=dict(color="rgba(0,128,0,0.5)", width=2, dash="dot"))
+                        fig4.add_trace(go.Scatter(x=[dates[-1]], y=[lower_band], mode='text', text=['Biên Quá Bán (-2σ)'], textposition='bottom left', showlegend=False, textfont=dict(color="green")))
+                        
+                        fig4.update_layout(title=f"Định lượng vùng giao dịch của {ticker}", xaxis_title="Ngày giao dịch", yaxis_title="Giá", height=500, showlegend=True)
                         st.plotly_chart(fig4, use_container_width=True)
                         
-                        # Hiển thị các khối hộp thông số toán học giải tích
+                        # Hiển thị các khối hộp thông số
                         st.subheader("📋 Kết quả giải mã hệ thống SDE từ dữ liệu thực:")
                         cm1, cm2, cm3 = st.columns(3)
                         cm1.metric(label="🎯 Trục cân bằng dài hạn (μ)", value=f"{calculated_mu:.2f}")
                         cm2.metric(label="⚡ Tốc độ hồi quy (θ)", value=f"{calculated_theta:.4f}")
-                        cm3.metric(label="🎲 Hệ số rủi ro biến động (σ)", value=f"{calculated_sigma:.4f}")
+                        cm3.metric(label="🎲 Độ lệch chuẩn rủi ro", value=f"{calculated_sigma:.4f}")
                         
-                        # Đoạn giải thích thuật toán cho slide
-                        st.info(f"💡 **Lời thoại thuyết trình:** Hệ thống đã tự động lấy ma trận đặc trưng của chuỗi giá {ticker}. Bằng cách giải bài toán bình phương tối thiểu, ta tìm được hệ số góc chuyển tiếp m = {m:.4f}. Vì m < 1, toán học chứng minh chuỗi giá có tính dừng hội tụ. Lực vô hình kéo giá về mức {calculated_mu:.2f} với vận tốc phục hồi hệ thống đạt {calculated_theta:.4f}.")
+                        st.info(f"💡 **Phân tích:** Hệ thống đã tự động lấy ma trận đặc trưng của chuỗi giá {ticker}. Bằng cách giải bài toán bình phương tối thiểu, ta tìm được trục cân bằng lý thuyết ở mức {calculated_mu:.2f}. Các đường đứt nét mô phỏng giới hạn sai số cho phép định vị các vùng Quá mua / Quá bán.")
                     else:
-                        st.warning("⚠️ Cổ phiếu này đang trong một xu hướng tăng trưởng hoặc suy thoái quá mạnh (Mất tính dừng). Do đó hệ thống không thể tìm thấy điểm hội tụ trung bình hồi quy tĩnh.")
+                        st.warning("⚠️ Cổ phiếu này đang trong một xu hướng tăng trưởng hoặc suy thoái quá mạnh (hệ số tự hồi quy >= 1). Hệ thống không thể tìm thấy điểm hội tụ trung bình hồi quy tĩnh.")
             except Exception as e:
                 st.error(f"Đã xảy ra lỗi hệ thống khi phân tích dữ liệu: {e}")
