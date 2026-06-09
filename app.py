@@ -129,86 +129,106 @@ with tab3:
         st.plotly_chart(fig3, use_container_width=True)
 
 # ==========================================
-# TAB 4: THỰC NGHIỆM DỮ LIỆU THỰC TẾ
+# TAB 4: THỰC NGHIỆM ĐỊNH LƯỢNG & MACHINE LEARNING
 # ==========================================
 with tab4:
-    st.header("⚡ Thực Nghiệm Thuật Toán Định Lượng Với Dữ Liệu Thật")
-    st.write("Nhập mã cổ phiếu để hệ thống tự động tải dữ liệu lịch sử và dùng phép toán Đại số tuyến tính giải ngược ra các tham số của tiến trình Ornstein-Uhlenbeck.")
+    st.header("⚡ Tích hợp Machine Learning Khuyến nghị Giao dịch")
+    st.write("Hệ thống tự động dùng Toán học trích xuất đặc trưng (Feature Engineering) và huấn luyện mô hình Logistic Regression để đưa ra tín hiệu MUA/BÁN cho ngày hôm nay.")
+    
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.preprocessing import StandardScaler
+    import warnings
+    warnings.filterwarnings('ignore')
     
     col1, col2 = st.columns([1, 3])
     with col1:
         ticker = st.text_input("Nhập mã cổ phiếu (Yahoo Finance):", "AAPL")
-        st.caption("Ví dụ: AAPL (Apple), MSFT (Microsoft), VCB.VN (Vietcombank), FPT.VN (FPT)")
+        st.caption("Ví dụ: AAPL, MSFT, VNM.VN, FPT.VN")
         
-        days_lookback = st.slider("Thời gian phân tích (ngày quá khứ)", 100, 500, 252)
-        run_btn = st.button("Chạy tính toán tham số")
+        days_lookback = st.slider("Dữ liệu quá khứ (để train bot)", 200, 1000, 500)
+        run_btn = st.button("Chạy Bot Định Lượng")
         
     with col2:
         if run_btn or ticker:
             try:
-                # 1. Tải dữ liệu từ Yahoo Finance
+                # 1. Tải dữ liệu
                 end_date = datetime.today()
                 start_date = end_date - timedelta(days=days_lookback)
                 
-                with st.spinner('Đang tải dữ liệu từ Yahoo Finance...'):
-                    data = yf.download(ticker, start=start_date, end=end_date)
+                with st.spinner('Đang tải data và huấn luyện mô hình...'):
+                    data = yf.download(ticker, start=start_date, end=end_date, progress=False)
                 
                 if data.empty:
-                    st.error("Không tìm thấy dữ liệu cho mã cổ phiếu này. Hãy kiểm tra lại ký hiệu mã.")
+                    st.error("Không tìm thấy dữ liệu.")
                 else:
-                    # Lấy chuỗi giá đóng cửa
-                    prices = data['Close'].values.flatten()
-                    dates = data.index
+                    df = data[['Close']].copy()
                     
-                    # 2. Xây dựng toán học ước lượng tham số (Model Calibration via OLS)
-                    X_prev = prices[:-1]
-                    X_curr = prices[1:]
+                    # 2. FEATURE ENGINEERING (Dùng Toán học tạo đặc trưng)
+                    # Tính lợi nhuận hằng ngày (Momentum)
+                    df['Return'] = df['Close'].pct_change()
                     
-                    # Áp dụng Đại số tuyến tính tìm ma trận hệ số bằng OLS [X_prev, 1]
-                    A = np.vstack([X_prev, np.ones(len(X_prev))]).T
-                    m, c = np.linalg.lstsq(A, X_curr, rcond=None)[0]
+                    # Tính Trục trung bình và Độ lệch chuẩn trượt (Rolling 20 ngày)
+                    window = 20
+                    df['Rolling_Mean'] = df['Close'].rolling(window=window).mean()
+                    df['Rolling_Std'] = df['Close'].rolling(window=window).std()
                     
-                    # Tính toán phần dư (Residuals) để tìm phương sai sai số
-                    residuals = X_curr - (m * X_prev + c)
-                    res_variance = np.var(residuals, ddof=2)
+                    # Trích xuất Z-Score: Đo lường khoảng cách từ giá đến trục cân bằng
+                    df['Z_Score'] = (df['Close'] - df['Rolling_Mean']) / df['Rolling_Std']
                     
-                    dt_step = 1.0  # Bước thời gian rời rạc là 1 ngày
+                    # 3. LABELING (Gán nhãn để huấn luyện)
+                    # Nhìn về tương lai 5 ngày (1 tuần giao dịch)
+                    df['Future_Return'] = df['Close'].shift(-5) / df['Close'] - 1
                     
-                    if m > 0 and m < 1: # Đảm bảo tính dừng
-                        calculated_theta = -np.log(m) / dt_step
-                        calculated_mu = c / (1 - m)
-                        calculated_sigma = np.sqrt(res_variance * 2 * calculated_theta / (1 - m**2))
-                        
-                        # 3. Trực quan hóa kết quả lên đồ thị
-                        fig4 = go.Figure()
-                        fig4.add_trace(go.Scatter(x=dates, y=prices, mode='lines', name=f'🔵 Giá thực tế {ticker}', line=dict(color='#1f77b4')))
-                        
-                        # Trục trung bình
-                        fig4.add_shape(type="line", x0=dates[0], y0=calculated_mu, x1=dates[-1], y1=calculated_mu, line=dict(color="Red", width=2, dash="dash"))
-                        fig4.add_trace(go.Scatter(x=[dates[-1]], y=[calculated_mu], mode='text', text=['🔴 Trục cân bằng'], textposition='top left', showlegend=False))
-                        
-                        # Biên trên / Biên dưới
-                        upper_band = calculated_mu + 2 * (calculated_sigma / np.sqrt(2 * calculated_theta))
-                        lower_band = calculated_mu - 2 * (calculated_sigma / np.sqrt(2 * calculated_theta))
-                        
-                        fig4.add_shape(type="line", x0=dates[0], y0=upper_band, x1=dates[-1], y1=upper_band, line=dict(color="rgba(255,0,0,0.5)", width=2, dash="dot"))
-                        fig4.add_trace(go.Scatter(x=[dates[-1]], y=[upper_band], mode='text', text=['Biên Quá Mua (+2σ)'], textposition='top left', showlegend=False, textfont=dict(color="red")))
-                        
-                        fig4.add_shape(type="line", x0=dates[0], y0=lower_band, x1=dates[-1], y1=lower_band, line=dict(color="rgba(0,128,0,0.5)", width=2, dash="dot"))
-                        fig4.add_trace(go.Scatter(x=[dates[-1]], y=[lower_band], mode='text', text=['Biên Quá Bán (-2σ)'], textposition='bottom left', showlegend=False, textfont=dict(color="green")))
-                        
-                        fig4.update_layout(title=f"Định lượng vùng giao dịch của {ticker}", xaxis_title="Ngày giao dịch", yaxis_title="Giá", height=500, showlegend=True)
-                        st.plotly_chart(fig4, use_container_width=True)
-                        
-                        # Hiển thị các khối hộp thông số
-                        st.subheader("📋 Kết quả giải mã hệ thống SDE từ dữ liệu thực:")
-                        cm1, cm2, cm3 = st.columns(3)
-                        cm1.metric(label="🎯 Trục cân bằng dài hạn (μ)", value=f"{calculated_mu:.2f}")
-                        cm2.metric(label="⚡ Tốc độ hồi quy (θ)", value=f"{calculated_theta:.4f}")
-                        cm3.metric(label="🎲 Độ lệch chuẩn rủi ro", value=f"{calculated_sigma:.4f}")
-                        
-                        st.info(f"💡 **Phân tích:** Hệ thống đã tự động lấy ma trận đặc trưng của chuỗi giá {ticker}. Bằng cách giải bài toán bình phương tối thiểu, ta tìm được trục cân bằng lý thuyết ở mức {calculated_mu:.2f}. Các đường đứt nét mô phỏng giới hạn sai số cho phép định vị các vùng Quá mua / Quá bán.")
+                    # Quy tắc: Tương lai tăng > 2% là MUA (1), giảm < -2% là BÁN (-1), còn lại ĐỨNG NGOÀI (0)
+                    df['Label'] = np.where(df['Future_Return'] > 0.02, 1, 
+                                           np.where(df['Future_Return'] < -0.02, -1, 0))
+                    
+                    # Xóa các dòng NaN do shift và rolling gây ra
+                    df_clean = df.dropna()
+                    
+                    # 4. TRAINING MACHINE LEARNING
+                    X = df_clean[['Z_Score', 'Return']]
+                    y = df_clean['Label']
+                    
+                    # Chuẩn hóa dữ liệu
+                    scaler = StandardScaler()
+                    X_scaled = scaler.fit_transform(X)
+                    
+                    # Dùng Logistic Regression với class_weight='balanced' để trị dữ liệu mất cân bằng
+                    model = LogisticRegression(class_weight='balanced', random_state=42)
+                    model.fit(X_scaled, y)
+                    
+                    # 5. PREDICTION (Dự báo cho ngày HIỆN TẠI)
+                    # Lấy dữ liệu của ngày mới nhất (dòng cuối cùng)
+                    latest_z = (df['Close'].iloc[-1] - df['Close'].rolling(window=window).mean().iloc[-1]) / df['Close'].rolling(window=window).std().iloc[-1]
+                    latest_ret = df['Return'].iloc[-1]
+                    
+                    latest_features = scaler.transform([[latest_z, latest_ret]])
+                    prediction = model.predict(latest_features)[0]
+                    prob = model.predict_proba(latest_features)[0]
+                    
+                    # Xử lý UI hiển thị tín hiệu
+                    st.subheader("🤖 Tín hiệu Bot Học Máy (Dự phóng 5 ngày tới)")
+                    
+                    if prediction == 1:
+                        st.success(f"🔥 KHUYẾN NGHỊ: **MUA (BUY)**")
+                        st.write(f"Độ tự tin của mô hình: {prob[2]*100:.1f}%")
+                        st.info("💡 Giải thích: Z-Score cho thấy giá đang bị ép xuống vùng quá bán. Mô hình nhận diện được mẫu hình tương đồng trong quá khứ thường dẫn đến nhịp bật tăng phục hồi.")
+                    elif prediction == -1:
+                        st.error(f"❄️ KHUYẾN NGHỊ: **BÁN (SELL)**")
+                        st.write(f"Độ tự tin của mô hình: {prob[0]*100:.1f}%")
+                        st.info("💡 Giải thích: Sợi dây thun giá đang kéo quá căng (Z-Score cao). Dòng tiền hưng phấn có dấu hiệu đạt đỉnh, lực hồi quy chuẩn bị kéo giá rơi xuống.")
                     else:
-                        st.warning("⚠️ Cổ phiếu này đang trong một xu hướng tăng trưởng hoặc suy thoái quá mạnh (hệ số tự hồi quy >= 1). Hệ thống không thể tìm thấy điểm hội tụ trung bình hồi quy tĩnh.")
+                        st.warning(f"⚖️ KHUYẾN NGHỊ: **ĐỨNG NGOÀI (HOLD)**")
+                        st.write(f"Độ tự tin của mô hình: {prob[1]*100:.1f}%")
+                        st.info("💡 Giải thích: Các đặc trưng toán học đang ở trạng thái nhiễu. Lực mua và bán cân bằng. Vào lệnh lúc này rủi ro cao.")
+                        
+                    # Vẽ đồ thị minh họa lịch sử giá và Z-Score
+                    fig4 = go.Figure()
+                    fig4.add_trace(go.Scatter(x=df.index, y=df['Close'], name="Giá thực tế"))
+                    fig4.add_trace(go.Scatter(x=df.index, y=df['Rolling_Mean'], name="Trục cân bằng (20 ngày)", line=dict(dash='dash', color='orange')))
+                    fig4.update_layout(title=f"Đồ thị vận động giá {ticker}", xaxis_title="Thời gian", yaxis_title="Giá", height=400)
+                    st.plotly_chart(fig4, use_container_width=True)
+
             except Exception as e:
-                st.error(f"Đã xảy ra lỗi hệ thống khi phân tích dữ liệu: {e}")
+                st.error(f"Đã xảy ra lỗi hệ thống: {e}")
